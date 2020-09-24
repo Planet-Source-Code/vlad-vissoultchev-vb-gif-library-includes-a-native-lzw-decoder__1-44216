@@ -1,0 +1,421 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+<html>
+<head>
+<title>LZW and GIF explained----Steve Blackstock</title>
+<meta http-equiv="Content-Type"		content="text/html; charset=iso-8859-1">
+<meta http-equiv="Content-Style-Type"	content="text/css">
+<meta http-equiv="Content-Script-Type"	content="text/javascript">
+<meta name="description"	content="This document explains GIF LZW algorithm. This is an HTML conversion from the original plain text.">
+<meta name="keywords"		content="GIF LZW, source code, Lempel Ziv Welch compression algorithm, YukinoriWatanabe">
+<meta name="author"		content="Yukinori Watanabe">
+<meta name="author_email"	content="xyuki@iname.com">
+<meta name="copyright"		content="The original plain text Copyright (C) Steve Blackstock. This HTML conversion Copyright(C)1998 Yukinori Watanabe">
+<link rev="made"		href="mailto:xyuki@iname.com">
+
+<!-- base href="http://www.geocities.co.jp/SiliconValley/3453/gif_info/doc/lzwexp_SteveBlackstock_en.html" -->
+<link rel="contents" type="text/html" target="_top" href="../source_en.html" hreflang="en" charset="iso-8859-1" lang="en" title="GIF Source Codes and Materials">
+
+<!-- Typos:
+	*"intialized string" ==> "initialized string"
+-->
+
+<style><!--
+BODY	{margin: 0 0 0 0; background-color:#fffff0;}
+H1, H2	{margin-left:8; margin-right:8;}
+P, DL	{margin-left:16; margin-right:16;}
+PRE	{margin-left:16;}
+.markerYellow	{background-color:#ffff00;}
+-->
+</style>
+
+<script language="JavaScript"><!--
+var	TwoFrames = (window.name=="lzwexp1") || (window.name=="lzwexp2")
+var	JSVersion = 1.0
+// -->
+</script>
+<script language="JavaScript1.1"><!--
+	JSVersion = 1.1
+// -->
+</script>
+</head>
+<body bgcolor="#fffff0" text="#000000" link="#cc00cc" vlink="#0000cc" alink="#ff0000"
+ TopMargin="0" LeftMargin="0" MarginWidth="0" MarginHeight="0"><DIV ALIGN=CENTER><!--#geoguide--></DIV>
+<table width="100%" border="0" cellspacing="0" cellpadding="0" bgcolor="#00ccff">
+<form>
+<tr><td align="left" valign="top">
+<script language="JavaScript"><!--
+	document.writeln('<a name="HEADER">')
+	if (!TwoFrames) {
+		document.write('<input type="button" value="Split this frame into two" onClick=')
+		if (JSVersion>=1.1)
+			document.write('"location.replace(\'lzwexp_SteveBlackstock2_en.html\')">')
+		else	document.write('"location.href=\'lzwexp_SteveBlackstock2_en.html\'">')
+	} else if (JSVersion>=1.1)
+		document.write('<input type="button" value="Close a frame" onClick="parent.location.replace(\'lzwexp_SteveBlackstock_en.html\')">')
+	document.writeln('<\/a>')
+// -->
+</script>
+</td>
+<td align="right" valign="top">[ <b>GIF Info:</b> <a target="_top" href="../index_en.html">English</a> / <a target="_top" href="../index_jp.html">Japanese</a> ]</td>
+</tr>
+</form>
+</table>
+
+<script language="JavaScript">
+</script>
+<noscript>
+	<b>NOTE:</b>
+	If you cannot see "2<sup>N</sup>" as "the N-th power of 2", 
+	your browser doesn't support the superscripts element (&lt;SUP&gt;) of the HTML 3.2,
+	so you cannot read this document appropriately.
+	Read the original <a href="lzwexp.txt">plain text</a> edition.
+	<hr>
+</noscript>
+
+<h1 align="center">LZW and GIF explained <nobr>--- Steve Blackstock</nobr></h1>
+
+<p>
+      I hope this little document will help enlighten those of you out there
+who want to know more about the Lempel-Ziv Welch compression algorithm, and,
+specifically, the implementation that GIF uses.
+</p>
+<p>
+     Before we start, here's a little terminology, for the purposes of this
+document:
+</p>
+
+<dl>
+<dt><a name="character">	"<b>character</b>":</a>
+<dd>	a fundamental data element. In normal text files, this is
+	just a single byte. In raster images, which is what we're interested in, it's
+	an index that specifies the color of a given pixel. I'll refer to an arbitrary
+	character as "<font face="sans-serif"><b>K</b></font>".
+</dd>
+<dt><a name="charstream">	"<b>charstream</b>":</a>
+<dd>	a stream of characters, as in a data file.
+</dd>
+<dt><a name="string">	"<b>string</b>":</a>
+<dd>	a number of continuous characters, anywhere from one to very
+	many characters in length. I can specify an arbitrary string as "<nobr><font face="sans-serif"><b>[...]K</b></font></nobr>".
+</dd>
+<dt><a name="prefix">	"<b>prefix</b>":</a>
+<dd>	almost the same as a string, but with the implication that a
+	prefix immediately precedes a character, and a prefix can have a length of
+	zero. So, a prefix and a character make up a string. I will refer to an
+	arbitrary prefix as "<nobr><font face="sans-serif"><b>[...]</b></font></nobr>".
+</dd>
+<dt><a name="root">	"<b>root</b>":</a>
+	<dd>	a single-character string. For most purposes, this is a
+	character, but we may occasionally make a distinction.
+	It is <nobr><font face="sans-serif"><b>[...]K</b></font></nobr>, where <nobr><font face="sans-serif"><b>[...]</b></font></nobr> is empty.
+	</dd>
+<dt><a name="code">	"<b>code</b>":</a>
+	<dd>	a number, specified by a known number of bits, which maps to a string.
+	</dd>
+<dt><a name="codestream">	"<b>codestream</b>":</a>
+	<dd>	the output stream of codes, as in the "raster data"
+	</dd>
+<dt><a name="entry">	"<b>entry</b>":</a>
+	<dd>	a code and its string.
+	</dd>
+<dt><a name="stringTable">	"<b>string table</b>":</a>
+	<dd>	a list of entries; usually, but not necessarily, unique.
+	</dd>
+</dl>
+<p>	That should be enough of that.
+</p>
+
+<p>	LZW is a way of compressing data that takes advantage of repetition of
+strings in the data. Since raster data usually contains a lot of this
+repetition, LZW is a good way of compressing and decompressing it.
+</p>
+<p>	For the moment, lets consider normal LZW encoding and decoding. GIF's
+variation on the concept is just an extension from there.
+</p>
+<p>	LZW manipulates three objects in both compression and decompression: the
+charstream, the codestream, and the string table. In compression, the
+charstream is the input and the codestream is the output. In decompression,
+the codestream is the input and the charstream is the output. The string table
+is a product of both compression and decompression, but is never passed from
+one to the other.
+</p>
+<p>	The first thing we do in LZW compression is initialize our string table>.
+To do this, we need to choose a <a href="#codeSize"><b>code size</b></a> (how many bits) and know how many
+values our characters can possibly take. Let's say our code size is 12 bits,
+meaning we can store <nobr>0<font face="Courier">-&gt;</font>FFF</nobr>, or 4096 entries in our string table. Lets also
+say that we have 32 possible different characters. (This corresponds to, say,
+a picture in which there are 32 different colors possible for each pixel.) To
+initialize the table, we set code#0 to character#0, code#1 to character#1,
+and so on, until code#31 to character#31. Actually, we are specifying that
+each code from 0 to 31 maps to a root. There will be no more entries in the
+table that have this property.
+</p>
+<p>	Now we start compressing data. Let's first define something called the
+"<a name="currentPrefix"><b>current prefix</b></a>". It's just a prefix that we'll store things in and compare
+things to now and then. I will refer to it as "<nobr><font face="sans-serif"><b>[.c.]</b></font></nobr>". Initially, the current
+prefix has nothing in it. Let's also define a "<a name="currentString"><b>current string</b></a>", which will be
+the current prefix plus the next character in the charstream. I will refer to
+the current string as "<nobr><font face="sans-serif"><b>[.c.]K</b></font></nobr>", where <font face="sans-serif"><b>K</b></font> is some character. OK, look at the
+first character in the charstream. Call it <font face="sans-serif"><b>P</b></font>. Make <nobr><font face="sans-serif"><b>[.c.]P</b></font></nobr> the current string.
+(At this point, of course, it's just the root <font face="sans-serif"><b>P</b></font>.) Now search through the
+string table to see if <nobr><font face="sans-serif"><b>[.c.]P</b></font></nobr> appears in it. Of course, it does now, because
+our string table is initialized to have all roots. So we don't do anything.
+Now make <nobr><font face="sans-serif"><b>[.c.]P</b></font></nobr> the current prefix. Look at the next character in the
+charstream. Call it <font face="sans-serif"><b>Q</b></font>. Add it to the current prefix to form <nobr><font face="sans-serif"><b>[.c.]Q</b></font></nobr>, the
+current string. Now search through the string table to see if <nobr><font face="sans-serif"><b>[.c.]Q</b></font></nobr> appears
+in it. In this case, of course, it doesn't. Aha! Now we get to do something.
+Add <nobr><font face="sans-serif"><b>[.c.]Q</b></font></nobr> (which is <font face="sans-serif"><b>PQ</b></font> in this case) to the string table for code#32, and
+output the code for <nobr><font face="sans-serif"><b>[.c.]</b></font></nobr> to the codestream. Now start over again with the
+current prefix being just the root <font face="sans-serif"><b>P</b></font>. Keep adding characters to <nobr><font face="sans-serif"><b>[.c.]</b></font></nobr> to form
+<nobr><font face="sans-serif"><b>[.c.]K</b></font></nobr>, until you can't find <nobr><font face="sans-serif"><b>[.c.]K</b></font></nobr> in the string table. Then output the code
+for <nobr><font face="sans-serif"><b>[.c.]</b></font></nobr> and add <nobr><font face="sans-serif"><b>[.c.]K</b></font></nobr> to the string table. In pseudo-code, the algorithm
+goes something like this:
+</p>
+<pre>
+     [1] Initialize string table;
+     [2] [.c.] &lt;- empty;
+     [3] K &lt;- next character in charstream;
+     [4] Is [.c.]K in string table?
+      (yes: [.c.] &lt;- [.c.]K;
+            go to [3];
+      )
+      (no: add [.c.]K to the string table;
+           output the code for [.c.] to the codestream;
+           [.c.] &lt;- K;
+           go to [3];
+      )
+</pre>
+<p>	It's as simple as that! Of course, when you get to step [3] and there
+aren't any more characters left, you just output the code for <nobr><font face="sans-serif"><b>[.c.]</b></font></nobr> and throw
+the table away. You're done.
+</p>
+
+<table border=0 cellspacing=0 cellpadding=0 width="100%">
+<tr>
+<td width=16></td>
+<td>
+
+<table border=1 cellspacing=0 cellpadding=4 bgcolor="#E0E0E0">
+<tr><td>
+<b>Note:</b> I (the editor of this HTML edition) think that step [4] should be as follows in GIF:
+<pre>
+                           ...
+   (no: output the code for [.c.] to the codestream;
+        add [.c.]K to the string table;
+                           ...
+</pre>
+The CompuServe adaptation of LZW for GIF creates variable length codes.
+When <nobr><font face="sans-serif"><b>[.c.]K</b></font></nobr> is entered into the string table,
+the current code length (this is refered as "<a href="#compressionSize">compression size</a>" in this document) for the output may be increased by one or
+the string table may be cleared and a clear code may be output.
+Therefore we should output the code for <nobr><font face="sans-serif"><b>[.c.]</b></font></nobr>
+before we add <nobr><font face="sans-serif"><b>[.c.]K</b></font></nobr> to the string table.
+</td></tr>
+</table>
+
+</td>
+<td width=16></td>
+</tr>
+</table>
+
+<p>	Wanna do an example? Let's pretend we have a four-character alphabet:
+<font face="sans-serif"><b>A</b></font>,<font face="sans-serif"><b>B</b></font>,<font face="sans-serif"><b>C</b></font>,<font face="sans-serif"><b>D</b></font>. The charstream looks like <font face="sans-serif"><b>ABACABA</b></font>.
+Let's compress it. First, we
+initialize our string table to: #0=<font face="sans-serif"><b>A</b></font>, #1=<font face="sans-serif"><b>B</b></font>, #2=<font face="sans-serif"><b>C</b></font>, #3=<font face="sans-serif"><b>D</b></font>.
+The first character is <font face="sans-serif"><b>A</b></font>, 
+which is in the string table, so <nobr><font face="sans-serif"><b>[.c.]</b></font></nobr> becomes <font face="sans-serif"><b>A</b></font>. 
+Next we get <nobr><font face="sans-serif"><b>AB</b></font></nobr>, which is
+not in the table, so we output code #0 (for <nobr><font face="sans-serif"><b>[.c.]</b></font></nobr>),
+and add <b><font face="sans-serif">AB</font></b> to the string table as code #4. <nobr><font face="sans-serif"><b>[.c.]</b></font></nobr> becomes <font face="sans-serif"><b>B</b></font>. Next we get
+<nobr><font face="sans-serif"><b>[.c.]A</b></font></nobr> = <nobr><font face="sans-serif"><b>BA</b></font></nobr>, which is not in the string table, so output code #1, and add <nobr><font face="sans-serif"><b>BA</b></font></nobr>
+to the string table as code #5. <nobr><font face="sans-serif"><b>[.c.]</b></font></nobr> becomes <font face="sans-serif"><b>A</b></font>. Next we get <nobr><font face="sans-serif"><b>AC</b></font></nobr>, which is not
+in the string table. Output code #0, and add <font face="sans-serif"><b>AC</b></font> to the string table as code
+#6. Now <nobr><font face="sans-serif"><b>[.c.]</b></font></nobr> becomes <font face="sans-serif"><b>C</b></font>. Next we get <nobr><font face="sans-serif"><b>[.c.]A</b></font></nobr> = <nobr><font face="sans-serif"><b>CA</b></font></nobr>, which is not in the table.
+Output #2 for <font face="sans-serif"><b>C</b></font>, and add <nobr><font face="sans-serif"><b>CA</b></font></nobr> to table as code#7. Now <nobr><font face="sans-serif"><b>[.c.]</b></font></nobr> becomes <font face="sans-serif"><b>A</b></font>. Next we
+get <nobr><font face="sans-serif"><b>AB</b></font></nobr>, which IS in the string table, so <nobr><font face="sans-serif"><b>[.c.]</b></font></nobr> gets <nobr><font face="sans-serif"><b>AB</b></font></nobr>, and we look at <nobr><font face="sans-serif"><b>ABA</b></font></nobr>,
+which is not in the string table, so output the code for <nobr><font face="sans-serif"><b>AB</b></font></nobr>, which is #4, and
+add <nobr><font face="sans-serif"><b>ABA</b></font></nobr> to the string table as code #8. <nobr><font face="sans-serif"><b>[.c.]</b></font></nobr> becomes <font face="sans-serif"><b>A</b></font>. We can't get any more
+characters, so we just output #0 for the code for <font face="sans-serif"><b>A</b></font>, and we're done. So, the
+codestream is <nobr>#0#1#0#2#4#0</nobr>.
+</p>
+<p>	A few words (four) should be said here about efficiency: use a hashing
+strategy. The search through the string table can be computationally
+intensive, and some hashing is well worth the effort. Also, note that
+"straight LZW" compression runs the risk of overflowing the string table -
+getting to a code which can't be represented in the number of bits you've set
+aside for codes. There are several ways of dealing with this problem, and GIF
+implements a very clever one, but we'll get to that.
+</p>
+<p>	An important thing to notice is that, 
+<font class="markerYellow">at any point during the compression, if <nobr><font face="sans-serif"><b>[...]K</b></font></nobr> is in the string table, <nobr><font face="sans-serif"><b>[...]</b></font></nobr> is there also.</font>
+This fact suggests an efficient method for storing strings in the table. Rather than
+store the entire string of <font face="sans-serif"><b>K</b></font>'s in the table, realize that 
+any string can be expressed as a prefix plus a character: <nobr><font face="sans-serif"><b>[...]K</b></font></nobr>.
+<font class="markerYellow">If we're about to store <nobr><font face="sans-serif"><b>[...]K</b></font></nobr> in the table, 
+we know that <nobr><font face="sans-serif"><b>[...]</b></font></nobr> is already there,
+so we can just store the
+code for <nobr><font face="sans-serif"><b>[...]</b></font></nobr> plus the final character <font face="sans-serif"><b>K</b></font></font>.
+</p>
+<p>	OK, that takes care of compression. Decompression is perhaps more
+difficult conceptually, but it is really easier to program.
+</p>
+<p>	Here's how it goes: We again have to start with an initialized string
+table. This table comes from what knowledge we have about the charstream that
+we will eventually get, like what possible values the characters can take. In
+GIF files, this information is in the header as the number of possible pixel
+values. The beauty of LZW, though, is that this is all we need to know. We
+will build the rest of the string table as we decompress the codestream. The
+compression is done in such a way that we will never encounter a code in the
+codestream that we can't translate into a string.
+</p>
+<p>	We need to define something called a "<a name="currentCode"><b>current code</b></a>", which I will refer
+to as <nobr>"<font face="sans-serif"><b>&lt;code&gt;</b></font>"</nobr>, and an <nobr>"<a name="oldCode"><b>old-code</b></a>"</nobr>, which I will refer to as <nobr>"<font face="sans-serif"><b>&lt;old&gt;</b></font>"</nobr>. To start
+things off, look at the first code. This is now <nobr><font face="sans-serif"><b>&lt;code&gt;</b></font></nobr>. This code will be in
+the initialized string table as the code for a root. Output the root to the
+charstream. Make this code the old-code <nobr><font face="sans-serif"><b>&lt;old&gt;</b></font></nobr>. <font face="Verdana" color="#FF0000"><b><a name="asterisk">*</a></b></font>Now look at the next code, and
+make it <nobr><font face="sans-serif"><b>&lt;code&gt;</b></font></nobr>. It is possible that this code will not be in the string table,
+but let's assume for now that it is. Output the string corresponding to <nobr><font face="sans-serif"><b>&lt;code&gt;</b></font></nobr>
+to the codestream. Now find the first character in the string you just
+translated. Call this <font face="sans-serif"><b>K</b></font>. Add this to the prefix <nobr><font face="sans-serif"><b>[...]</b></font></nobr> generated by <nobr><font face="sans-serif"><b>&lt;old&gt;</b></font></nobr> to
+form a new string <nobr><font face="sans-serif"><b>[...]K</b></font></nobr>. Add this string <nobr><font face="sans-serif"><b>[...]K</b></font></nobr> to the string table, and set
+the old-code <nobr><font face="sans-serif"><b>&lt;old&gt;</b></font></nobr> to the current code <nobr><font face="sans-serif"><b>&lt;code&gt;</b></font></nobr>. Repeat from where I typed the
+<a href="#asterisk">asterisk</a>, and you're all set. Read this paragraph again if you just skimmed
+it!!!  Now let's consider the possibility that <nobr><font face="sans-serif"><b>&lt;code&gt;</b></font></nobr> is not in the string
+table. Think back to compression, and try to understand what happens when you
+have a string like <nobr><font face="sans-serif"><b>P[...]P[...]PQ</b></font></nobr> appear in the charstream. Suppose <nobr><font face="sans-serif"><b>P[...]</b></font></nobr> is
+already in the string table, but <nobr><font face="sans-serif"><b>P[...]P</b></font></nobr> is not. The compressor will parse out
+<nobr><font face="sans-serif"><b>P[...]</b></font></nobr>, and find that <nobr><font face="sans-serif"><b>P[...]P</b></font></nobr> is not in the string table. It will output the
+code for <nobr><font face="sans-serif"><b>P[...]</b></font></nobr>, and add <nobr><font face="sans-serif"><b>P[...]P</b></font></nobr> to the string table. Then it will get up to
+<nobr><font face="sans-serif"><b>P[...]P</b></font></nobr> for the next string, and find that <nobr><font face="sans-serif"><b>P[...]P</b></font></nobr> is in the table, as
+     the code just added. So it will output the code for <nobr><font face="sans-serif"><b>P[...]P</b></font></nobr> if it finds
+that <nobr><font face="sans-serif"><b>P[...]PQ</b></font></nobr> is not in the table. The decompressor is always "one step
+behind" the compressor. When the decompressor sees the code for <nobr><font face="sans-serif"><b>P[...]P</b></font></nobr>, it
+will not have added that code to it's string table yet because it needed the
+beginning character of <nobr><font face="sans-serif"><b>P[...]P</b></font></nobr> to add to the string for the last code, <nobr><font face="sans-serif"><b>P[...]</b></font></nobr>,
+to form the code for <nobr><font face="sans-serif"><b>P[...]P</b></font></nobr>. However, when a decompressor finds a code that
+it doesn't know yet, it will always be the very next one to be added to the
+string table. So it can guess at what the string for the code should be, and,
+in fact, it will always be correct. If I am a decompressor, and I see
+code#124, and yet my string table has entries only up to code#123, I can
+figure out what code#124 must be, add it to my string table, and output the
+string. If code#123 generated the string, which I will refer to here as a
+prefix, <nobr><font face="sans-serif"><b>[...]</b></font></nobr>, then code#124, in this special case, will be <nobr><font face="sans-serif"><b>[...]</b></font></nobr> plus the
+first character of <nobr><font face="sans-serif"><b>[...]</b></font></nobr>. So just add the first character of <nobr><font face="sans-serif"><b>[...]</b></font></nobr> to the end
+of itself. Not too bad.  As an example (and a very common one) of this special
+case, let's assume we have a raster image in which the first three pixels have
+the same color value. That is, my charstream looks like: <nobr><font face="sans-serif"><b>QQQ....</b></font></nobr> For the sake
+of argument, let's say we have 32 colors, and <font face="sans-serif"><b>Q</b></font> is the color#12. The
+compressor will generate the code sequence 12,32,.... (if you don't know why,
+take a minute to understand it.) Remember that #32 is not in the initial
+table, which goes from #0 to #31. The decompressor will see #12 and translate
+it just fine as color <font face="sans-serif"><b>Q</b></font>. Then it will see #32 and not yet know what that
+means. But if it thinks about it long enough, it can figure out that <font face="sans-serif"><b>QQ</b></font> should
+be entry#32 in the table and <font face="sans-serif"><b>QQ</b></font> should be the next string output.  So the
+decompression pseudo-code goes something like:
+</p>
+<pre>
+     [1] Initialize string table;
+     [2] get first code: &lt;code&gt;;
+     [3] output the string for &lt;code&gt; to the charstream;
+     [4] &lt;old&gt; = &lt;code&gt;;
+     [5] &lt;code&gt; &lt;- next code in codestream;
+     [6] does &lt;code&gt; exist in the string table?
+      (yes: output the string for &lt;code&gt; to the charstream;
+            [...] &lt;- translation for &lt;old&gt;;
+            K &lt;- first character of translation for &lt;code&gt;;
+            add [...]K to the string table;
+            &lt;old&gt; &lt;- &lt;code&gt;;
+      )
+      (no: [...] &lt;- translation for &lt;old&gt;;
+           K &lt;- first character of [...];
+           output [...]K to charstream and add it to string table;
+           &lt;old&gt; &lt;- &lt;code&gt;
+      )
+     [7] go to [5];
+</pre>
+<p>	Again, when you get to step [5] and there are no more codes, you're
+finished.  Outputting of strings, and finding of initial characters in strings
+are efficiency problems all to themselves, but I'm not going to suggest ways
+to do them here. Half the fun of programming is figuring these things out!
+</p>
+<hr size=1>
+<p>	Now for the GIF variations on the theme. In part of the header of a GIF
+file, there is a field, in the Raster Data stream, called 
+<a name="codeSize">"<b>code size</b>"</a>. This is
+a very misleading name for the field, but we have to live with it. What it is
+really is the "<b>root size</b>". The actual size, in bits, of the compression codes
+actually changes during compression/decompression, and I will refer to that
+size here as the "<a name="compressionSize"><b>compression size</b></a>".
+The initial table is just the codes for all the roots, as usual, but two special codes 
+are added on top of those.
+Suppose you have a "code size", which is usually the number of bits per pixel
+in the image, of <b>N</b>. If the number of bits/pixel is one, then <b>N</b> must be <b>2</b>:
+the roots take up slots #0 and #1 in the initial table, and the two special codes
+will take up slots #4 and #5. In any other case, <b>N</b> is the number of bits per
+pixel, and the roots take up slots #0 through <nobr>#(2<sup><b>N</b></sup>-1),</nobr>
+and the special codes are <nobr>(2<sup><b>N</b></sup>)</nobr> and 
+<nobr>(2<sup><b>N</b></sup>+1)</nobr>.
+The initial compression size will be <b>N</b>+1 bits per
+code. If you're encoding, you output the codes (<b>N</b>+1) bits at a time to start
+with, and if you're decoding, you grab <nobr>(<b>N</b>+1)</nobr> bits from the codestream at a
+time.  As for the special codes: <nobr><font face="sans-serif"><b>&lt;CC&gt;</b></font></nobr>
+or the <b>clear code</b>, is <nobr>(2<sup><b>N</b></sup>)</nobr>,
+and <nobr><font face="sans-serif"><b>&lt;EOI&gt;</b></font></nobr>, or <b>end-of-information</b>, is 
+<nobr>(2<sup><b>N</b></sup>+1)</nobr>. <nobr><font face="sans-serif">&lt;CC&gt;</font></nobr>
+tells the compressor to reinitialize the string table, and to reset the compression size to
+(<b>N</b>+1). <nobr><font face="sans-serif">&lt;EOI&gt;</font></nobr>
+means there's no more in the codestream.  If you're encoding or decoding, you
+should start adding things to the string table at <nobr><font face="sans-serif">&lt;CC&gt;</font></nobr> + 2. If you're
+encoding, you should output <nobr><font face="sans-serif">&lt;CC&gt;</font></nobr> as the very first code, and then whenever
+after that you reach code <b>#4095</b> (hex <b>FFF</b>), because GIF does not allow
+compression sizes to be greater than <b>12 bits</b>. If you're decoding, you should
+reinitialize your string table when you observe <nobr><font face="sans-serif">&lt;CC&gt;</font></nobr>.  The variable
+compression sizes are really no big deal. If you're encoding, you start with a
+compression size of (<b>N</b>+1) bits, and, whenever you output the code
+<nobr>(2<sup>compression size</sup>-1)</nobr>,
+you bump the compression size up one bit. So the
+next code you output will be one bit longer. Remember that the largest
+compression size is <b>12 bits</b>, corresponding to a code of <b>4095</b>. If you get that
+far, you must output <nobr><font face="sans-serif">&lt;CC&gt;</font></nobr> as the next code, and start over.  If you're
+decoding, you must increase your compression size AS SOON AS YOU write entry
+<nobr>#(2<sup>compression size</sup>-1)</nobr> to the string table. The next code you READ will
+be one bit longer. Don't make the mistake of waiting until you need to add the code
+<nobr>(2<sup>compression size</sup>)</nobr>
+to the table. You'll have already missed a bit from the last code.
+</p>
+<p>
+The packaging of codes into a bitsream for the raster data is
+also a potential stumbling block for the novice encoder or decoder. The lowest
+order bit in the code should coincide with the lowest available bit in the
+first available byte in the codestream. For example, if you're starting with
+5-bit compression codes, and your first three codes are, say, <nobr><font face="Courier New">&lt;abcde&gt;</font></nobr>,
+<nobr><font face="Courier New">&lt;fghij&gt;</font></nobr>, <nobr><font face="Courier New">&lt;klmno&gt;</font></nobr>, where <font face="Courier New">e</font>, <font face="Courier New">j</font>, and <font face="Courier New">o</font> are bit#0, then your codestream will start
+off like:
+</p>
+<font size="+1">
+<pre>
+       byte#0: <font color="#000099">hij</font><font color="#990000">abcde</font>
+       byte#1: .<font color="#009900">klmno</font><font color="#000099">fg</font>
+</pre>
+</font>
+<p>	So the differences between straight LZW and GIF LZW are: two additional
+special codes and variable compression sizes. If you understand LZW, and you
+understand those variations, you understand it all!
+</p>
+<p>	Just as sort of a P.S., you may have noticed that a compressor has a
+little bit of flexibility at compression time. I specified a "greedy" approach
+to the compression, grabbing as many characters as possible before outputting
+codes. This is, in fact, the standard LZW way of doing things, and it will
+yield the best compression ratio. But there's no rule saying you can't stop
+anywhere along the line and just output the code for the current prefix,
+whether it's already in the table or not, and add that string plus the next
+character to the string table. There are various reasons for wanting to do
+this, especially if the strings get extremely long and make hashing difficult.
+If you need to, do it.
+</p>
+<p>	Hope this helps out.----steve blackstock
+</p>
+<br>
+</body>
+</html>
+
