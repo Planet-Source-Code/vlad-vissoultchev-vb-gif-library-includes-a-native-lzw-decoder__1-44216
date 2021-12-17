@@ -50,7 +50,7 @@ Private Const ERR_INPUT_PAST_EOF        As String = "Input past end of file"
 Private Const STR_GIF87A                As String = "GIF87a"
 Private Const STR_GIF89A                As String = "GIF89a"
 Private Const MAX_BITS                  As Long = 12
-Private Const TABLE_SIZE                As Long = 2 ^ MAX_BITS
+Private Const TABLE_SIZE                As Long = 2 ^ (MAX_BITS + 1)
 
 '--- look-up table 'powers-of-two'
 Private m_aPOT(-1 To 31)            As Long
