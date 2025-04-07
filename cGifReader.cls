@@ -149,9 +149,9 @@ Private Sub RaiseError(sFunction As String)
     End With
 End Sub
 
-Private Sub PrintError(sFunction As String)
-    Debug.Print MODULE_NAME; "."; sFunction; IIf(Erl <> 0, "(" & Erl & ")", ""); ": "; Err.Description
-End Sub
+'Private Sub PrintError(sFunction As String)
+'    Debug.Print MODULE_NAME; "."; sFunction; IIf(Erl <> 0, "(" & Erl & ")", ""); ": "; Err.Description
+'End Sub
 
 '=========================================================================
 ' Properties
@@ -274,8 +274,6 @@ End Function
 
 Public Function Init(sFileName As String) As Boolean
     Const FUNC_NAME     As String = "Init"
-    Dim lIdx            As Long
-    Dim bColor          As Boolean
     
     On Error GoTo EH
     '--- init/clear member vars
@@ -445,11 +443,6 @@ Private Function pvGetFlag(ByVal lFlags As Long, ByVal lMask As UcsGifFlags) As 
     End If
 End Function
 
-Private Function pvPadScanline(ByVal lOffset As Long)
-'--- DIB section horizontal scanline padding to dword
-    pvPadScanline = (lOffset + 3) And (Not 3)
-End Function
-
 '= I/O handling ==========================================================
 
 Private Function pvReadByte() As Byte
@@ -575,24 +568,23 @@ Private Sub pvLzwExpand(aBuffer() As Byte, ByVal lBufSize)
     On Error GoTo EH
     lNextCode = m_lClearTable + 2 '--- first code = m_lClearTable + 2
     bClearFlag = True
-    lNewCode = pvLzwReadCode()
     Do While lIdx < lBufSize
         lNewCode = pvLzwReadCode()
         '--- check for terminator
         If lNewCode = m_lClearTable + 1 Then '--- terminator = m_lClearTable + 1
             Exit Sub
         End If
-        If bClearFlag Then
+        If lNewCode = m_lClearTable Then
+            bClearFlag = True
+            m_lCurrentBits = m_lInitBits
+            m_lMaxCode = m_aPOT(m_lCurrentBits) - 1
+            lNextCode = m_lClearTable + 2 '--- first code = m_lClearTable + 2
+        ElseIf bClearFlag Then
             bClearFlag = False
             lOldCode = lNewCode
             bCharacter = lNewCode
             aBuffer(lIdx) = bCharacter
             lIdx = lIdx + 1
-        ElseIf lNewCode = m_lClearTable Then
-            bClearFlag = True
-            m_lCurrentBits = m_lInitBits
-            m_lMaxCode = m_aPOT(m_lCurrentBits) - 1
-            lNextCode = m_lClearTable + 2 '--- first code = m_lClearTable + 2
         Else
             '--- decode string
             If lNewCode < lNextCode Then
